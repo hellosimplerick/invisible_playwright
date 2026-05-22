@@ -39,6 +39,12 @@ markers = [
     "linux_only: tests that require Linux platform",
 ]
 addopts = "-m 'not slow and not e2e'"
+# tests/playwright-upstream/ is a vendored Microsoft Playwright test suite
+# used for compatibility verification on demand. It has its own deps
+# (pixelmatch with API not matching our version) and a conftest that fails
+# collection in our env. Run it explicitly with --override-ini for compat
+# audits, not on every push.
+norecursedirs = ["playwright-upstream"]
 
 [project.scripts]
 invisible-playwright = "invisible_playwright.cli:main"
