@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-05-21
+
+### Fixed
+- [#18](https://github.com/feder-cr/invisible_playwright/issues/18): Tab crash on `id.sky.com` and similar sites when running with `headless=True` on Windows. Two separate bugs that only triggered together: (1) the Chromium content sandbox at default level 6 puts content processes on `kAlternateWinstation`, but the wrapper hides the browser window on its own alt-desktop (`CreateDesktop` for headless on Windows). Mismatched desktops → cross-process navigations (Adobe AppMeasurement on id.sky.com triggers them) couldn't reparent windows → content process exits cleanly and Playwright fires `page.on('crash')`. (2) The canvas2d `getImageData` stealth spoof wrote to a read-only mapped `DataSourceSurface`. On GPU-backed canvases that memory is write-protected → segfault during the final `getImageData` id.sky.com runs at page unload. Wrapper now sets `security.sandbox.content.level=4` in the alt-desktop workaround set, and `firefox-7` ships the source fix that moves the noise to the JS array's writable backing buffer. Reporter: [@gamefireat123-eng](https://github.com/gamefireat123-eng).
+
+### Changed
+- `BINARY_VERSION` bumped from `firefox-5` to `firefox-7`. `firefox-6` was rolled back when its partial fix turned out to be wrong (the iframe-burst hypothesis was a dead end; bisection in the evening found the real two-bug cause documented above).
+
 ## [0.1.6] - 2026-05-21
 
 ### Added
