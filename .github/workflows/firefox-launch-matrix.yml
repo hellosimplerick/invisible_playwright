@@ -1,0 +1,102 @@
+name: firefox-launch-matrix
+
+# Cross-Windows-edition smoke for the shipped firefox-N binary.
+# Triggered by issue #22 (firefox-7 SxS mismatch on Win11 build 26200,
+# reporter `jannusdorfer-create`).
+#
+# Runs the exact reporter snippet on every Windows runner GitHub offers,
+# from a fresh checkout. If any matrix cell fails the same way, the bug
+# is reproducible on at least one clean-ish environment and we ship a
+# sidecar mozglue.manifest fix. If all cells pass, the bug is confined
+# to the reporter's specific environment (Pro/Enterprise GPO, EDR, etc.).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/firefox-launch-matrix.yml'
+
+jobs:
+  smoke:
+    name: launch (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025, windows-latest]
+        python: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Windows edition + build info
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          Write-Host "Caption    : $($os.Caption)"
+          Write-Host "BuildNumber: $($os.BuildNumber)"
+          Write-Host "OSArch     : $($os.OSArchitecture)"
+          Write-Host "Edition    : $((Get-CimInstance Win32_OperatingSystem).OperatingSystemSKU)"
+          Write-Host "---"
+          Write-Host "VC++ Redistributables installed:"
+          Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' `
+            -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like '*Visual C++*Redist*' } |
+            Select-Object DisplayName, DisplayVersion |
+            Format-Table -AutoSize
+
+      - name: Install package from this commit
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Fetch firefox-7 binary
+        run: python -m invisible_playwright fetch
+
+      - name: Verify firefox.exe can launch standalone (the snippet that fails for issue #22)
+        shell: pwsh
+        run: |
+          # The platformdirs path has the duplicated `invisible-playwright` segment
+          # on Windows (user_cache_dir convention).
+          $ffPath = "$env:LOCALAPPDATA\invisible-playwright\invisible-playwright\Cache\firefox-7\firefox.exe"
+          if (-not (Test-Path $ffPath)) {
+              Write-Error "firefox.exe NOT FOUND at $ffPath"
+              exit 1
+          }
+          Write-Host "Launching: $ffPath --version"
+          & $ffPath --version
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "firefox.exe --version returned $LASTEXITCODE"
+              exit $LASTEXITCODE
+          }
+
+      - name: Run reporter's exact InvisiblePlaywright snippet
+        run: |
+          python -c "
+          import asyncio
+          from invisible_playwright.async_api import InvisiblePlaywright
+          async def main():
+              async with InvisiblePlaywright(seed=9128) as browser:
+                  page = await browser.new_page()
+                  await page.goto('about:blank')
+                  print('OK: page loaded, url =', page.url)
+          asyncio.run(main())
+          "
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: launch-failure-${{ matrix.os }}-py${{ matrix.python }}
+          path: |
+            ${{ env.LOCALAPPDATA }}/invisible-playwright/invisible-playwright/Cache/firefox-7/firefox.exe
+            ${{ env.LOCALAPPDATA }}/invisible-playwright/invisible-playwright/Cache/firefox-7/mozglue.dll
+          if-no-files-found: warn
+          retention-days: 7
