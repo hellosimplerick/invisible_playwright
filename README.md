@@ -34,14 +34,14 @@ Everything is driven by preferences - no hardcoded values in the binary. You cha
 
 ## How it compares
 
-Two open-source peers take the same source-level patching approach: **Camoufox** (Firefox) and **CloakBrowser** (Chromium). Camoufox pioneered it but is in a roughly year-long maintenance gap — its base Firefox is several majors behind. CloakBrowser is fresh and active, but still hits the Chromium reCAPTCHA ceiling. The commercial anti-detect browsers (**Multilogin**, **GoLogin**, AdsPower, Dolphin, Kameleo) ship patched Chromium with JS-layer spoofing — they're paid SaaS with managed profiles, but on raw detection bypass they sit below both source-level OSS approaches.
+The closest peer in the source-level patching space is **Camoufox** (Firefox, open source) — same approach as ours, but in a roughly year-long maintenance gap with its base Firefox several majors behind. **CloakBrowser** ships a similar pitch for Chromium, but its binary is **closed source** (the source-level patches are not published — you only get the compiled output), and it still hits the Chromium reCAPTCHA ceiling. The commercial anti-detect browsers (**Multilogin**, **GoLogin**, AdsPower, Dolphin, Kameleo) are paid SaaS that overlay JS-layer spoofing on a patched Chromium — managed profiles are nice but raw detection bypass sits below both Camoufox and us.
 
 | | invisible_playwright | Camoufox | CloakBrowser | Multilogin | GoLogin |
 |---|---|---|---|---|---|
 | Engine | Firefox 150 | Firefox (~1 year old base) | Chromium | Chromium fork | Chromium fork |
-| Patch depth | C++ source | C++ source | C++ source | JS overrides | JS overrides |
+| Patch depth | C++ source | C++ source | C++ source (binary only) | JS overrides | JS overrides |
 | Maintenance | Active (weekly) | Gap (~1 year) | Active | Active SaaS | Active SaaS |
-| Self-hosted / Open source | ✅ MIT | ✅ MPL | ✅ MIT | ❌ SaaS | ❌ SaaS |
+| Open source | ✅ MIT | ✅ MPL | ❌ Closed source (binary only) | ❌ Closed source | ❌ Closed source |
 | `.toString()` clean | ✅ | ✅ | ✅ | ❌ Detectable shims | ❌ Detectable shims |
 | Canvas / WebGL / Audio | ✅ C++ | ⚠️ Drift vs current FF | ✅ C++ | ⚠️ JS override | ⚠️ JS override |
 | SOCKS5 auth | ✅ Patched | ❌ | ⚠️ Playwright proxy | ⚠️ Varies | ⚠️ Varies |
