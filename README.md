@@ -17,7 +17,7 @@
 
 ## Why it's powerful
 
-**This is the actively maintained Firefox-based anti-detect browser in 2026.** Camoufox pioneered the source-level patched Firefox approach, but the project has been in a roughly year-long maintenance gap and its base Firefox version is now several majors behind. CloakBrowser does the same thing for Chromium and works well, but it still hits the Chromium reCAPTCHA ceiling (~0.3-0.5). `invisible_playwright` ships **Firefox 150** with weekly releases, source-level C++ patches end-to-end, and a measured **0.90 reCAPTCHA v3** score.
+**This is the actively maintained Firefox-based anti-detect browser in 2026.**  
 
 **Most other anti-detect browsers patch Chromium at the JavaScript level** - they override `navigator`, `WebGLRenderingContext.getParameter`, canvas APIs, and so on via injected scripts. This has two fatal problems:
 
