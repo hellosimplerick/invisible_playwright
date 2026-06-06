@@ -53,8 +53,10 @@ RELEASE_URL_TEMPLATE = (
 # daijro/geoip-all-in-one merges IP2Location LITE + GeoLite2 + DB-IP into a
 # single mmdb (country ISO + coordinates + IANA timezone via tzfpy), rebuilt
 # weekly. GPL-3.0, so we DOWNLOAD it at runtime into the user cache (like the
-# Firefox binary) rather than bundling it into this MIT package. Pinned to a
-# known-good weekly tag; bump to refresh. The `-all` variant covers IPv4+IPv6.
+# Firefox binary) rather than bundling it into this MIT package. The `-all`
+# variant covers IPv4+IPv6. download.py tracks the LATEST release and refreshes
+# weekly; GEOIP_MMDB_VERSION is only the cold-cache fallback when the GitHub
+# API is unreachable on a machine that has never downloaded the DB.
 GEOIP_REPO: str = "daijro/geoip-all-in-one"
 GEOIP_MMDB_VERSION: str = "2026.06.03"
 GEOIP_ASSET: str = "geoip-aio-all.mmdb.zip"

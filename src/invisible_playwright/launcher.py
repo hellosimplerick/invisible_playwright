@@ -137,12 +137,13 @@ class InvisiblePlaywright:
             locale: BCP-47 tag (e.g. ``"en-US"``). Drives the
                 ``Accept-Language`` header and ``navigator.language``.
             timezone: IANA zone (e.g. ``"America/New_York"``) — used as-is
-                when set. ``""`` (default) or ``"auto"`` resolves the zone
-                from the proxy egress IP when a proxy is set (one lookup
-                through the proxy + an offline mmdb), otherwise the host TZ.
-                ``"host"`` / ``"local"`` forces the host TZ even behind a
-                proxy. With a proxy, an unresolvable zone raises rather than
-                silently falling back to the host TZ (``timezone_mismatch``).
+                when set, the only way to force a specific zone. ``""``
+                (default) or ``"auto"`` ALWAYS resolves from the egress IP:
+                through the proxy when one is set, otherwise from the host's
+                own public IP (one lookup + an offline mmdb). On failure: with
+                a proxy it raises (a foreign proxy on the host TZ is the
+                ``timezone_mismatch`` signal); without a proxy it falls back to
+                the host TZ so a transient lookup failure can't break launch.
             extra_prefs: Optional dict of Firefox prefs overlayed on top
                 of the generated profile — useful for niche tweaks
                 without monkey-patching the package.

@@ -146,27 +146,22 @@ Schemes supported: `socks5`, `socks4`, `http`, `https`. Auth works on all of the
 The browser timezone follows `timezone=`:
 
 ```python
-# default: with a proxy, the timezone is auto-derived from the proxy egress IP
+# default: timezone is auto-derived from the egress IP (proxy egress if a
+# proxy is set, otherwise the host's own public IP)
 with InvisiblePlaywright(proxy=proxy) as browser:
     ...
 
-# explicit IANA zone always wins
+# explicit IANA zone always wins — the only way to force a specific zone
 with InvisiblePlaywright(proxy=proxy, timezone="America/New_York") as browser:
-    ...
-
-# opt out and keep the host timezone even behind a proxy
-with InvisiblePlaywright(proxy=proxy, timezone="host") as browser:
     ...
 ```
 
 | `timezone=` | with proxy | without proxy |
 |---|---|---|
-| `""` (default) | auto-derived from egress IP | host timezone |
-| `"auto"` | auto-derived from egress IP | host timezone |
+| `""` (default) / `"auto"` | auto from proxy egress IP | auto from host public IP |
 | `"Area/City"` | that zone | that zone |
-| `"host"` / `"local"` | host timezone | host timezone |
 
-A proxy in a different country paired with the host timezone is the classic `timezone_mismatch` signal, so a proxy with no explicit timezone now resolves automatically. The egress IP is looked up through the proxy and mapped to its IANA zone with an offline database ([`daijro/geoip-all-in-one`](https://github.com/daijro/geoip-all-in-one)), downloaded and cached on first use. If a proxy is set but the zone can't be resolved, the launch raises rather than silently falling back to the host zone — pass an explicit `timezone=` or `timezone="host"` to override. Point `STEALTHFOX_GEOIP_MMDB` at your own `.mmdb` to skip the download.
+The timezone always tracks the actual egress, so it can't disagree with the IP — a proxy in a different country paired with the host timezone is the classic `timezone_mismatch` signal. The egress IP is mapped to its IANA zone with an offline database ([`daijro/geoip-all-in-one`](https://github.com/daijro/geoip-all-in-one)), which auto-updates against its weekly rebuild and is cached locally (point `STEALTHFOX_GEOIP_MMDB` at your own `.mmdb` to skip the download). On failure: with a proxy the launch raises rather than silently using the host zone (pass an explicit `timezone=` to override); without a proxy it falls back to the host timezone so a transient lookup failure can't break the launch.
 
 ### Pinning specific fingerprint fields
 

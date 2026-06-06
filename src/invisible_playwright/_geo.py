@@ -1,23 +1,23 @@
-"""Resolve the session timezone from the proxy egress IP (``timezone="auto"``).
+"""Resolve the session timezone from the egress IP (``timezone="auto"``).
 
-Approach B: discover the egress IP with one HTTP request routed *through the
-configured proxy*, then map IP → IANA timezone with an offline mmdb
+Approach B: discover the egress IP with one HTTP request — routed *through the
+proxy* when one is set, otherwise a direct request that sees the host's own
+public IP — then map IP → IANA timezone with an offline mmdb
 (``daijro/geoip-all-in-one``, downloaded + cached by ``download.py``).
 
 Precedence (see ``resolve_session_timezone``):
 
-    "host" / "local"   → ""        force host TZ (escape hatch)
-    explicit IANA      → unchanged  explicit always wins
-    "" + no proxy      → ""        host TZ (default, unchanged behaviour)
-    "" + proxy         → egress    NEW default: a proxy with no timezone is
-                                   exactly the timezone_mismatch trap, so we
-                                   auto-resolve it.
-    "auto" + no proxy  → ""        nothing to resolve, fall back to host TZ
-    "auto" + proxy     → egress
+    explicit IANA   → unchanged   explicit always wins
+    "" / "auto"     → egress      ALWAYS resolve. With a proxy, from the proxy
+                                  egress IP; without a proxy, from the host's
+                                  own public IP. This is the default.
 
-When a proxy IS set we fail loudly rather than silently fall back to the host
-TZ — a foreign proxy paired with the host timezone is the precise signal
-detectors flag as ``timezone_mismatch``.
+On failure:
+    with a proxy    → raise       a foreign proxy paired with the host TZ is
+                                  the precise ``timezone_mismatch`` signal, so
+                                  we fail loudly rather than fall back silently.
+    without a proxy → "" (host)   the host TZ is a safe default, so a transient
+                                  lookup failure must not break the launch.
 """
 from __future__ import annotations
 
@@ -79,14 +79,16 @@ def _proxies_for_requests(proxy: Dict[str, str]) -> Dict[str, str]:
 
 
 def discover_egress_ip(
-    proxy: Dict[str, str], *, timeout: float = 10.0
+    proxy: Optional[Dict[str, str]] = None, *, timeout: float = 10.0
 ) -> str:
-    """Return the public IP seen when routing through ``proxy``.
+    """Return the public egress IP.
 
-    Tries each echo endpoint in turn; raises :class:`GeoTimezoneError` if none
-    return a valid IP (SOCKS support requires ``requests[socks]`` / PySocks).
+    Routes the request through ``proxy`` when given (SOCKS support requires
+    ``requests[socks]`` / PySocks); with ``proxy=None`` it makes a direct
+    request that sees the host's own public IP. Tries each echo endpoint in
+    turn; raises :class:`GeoTimezoneError` if none return a valid IP.
     """
-    proxies = _proxies_for_requests(proxy)
+    proxies = _proxies_for_requests(proxy) if proxy else None
     last_err: Optional[Exception] = None
     for url in _IP_ECHO_ENDPOINTS:
         try:
@@ -139,22 +141,24 @@ def resolve_session_timezone(
 ) -> str:
     """Map the user's ``timezone`` setting to a concrete IANA zone (or ``""``).
 
-    See the module docstring for the full precedence table. Raises
-    :class:`GeoTimezoneError` when a proxy is set but the egress timezone
-    cannot be resolved (fail-early — never silently use the host TZ behind a
-    foreign proxy).
+    See the module docstring for the full precedence table. ``""``/``"auto"``
+    ALWAYS resolve from the egress IP (proxy egress if a proxy is set, else the
+    host's own public IP). On failure: with a proxy we raise
+    :class:`GeoTimezoneError` (never silently use the host TZ behind a foreign
+    proxy); without a proxy we fall back to ``""`` (host TZ) so a transient
+    lookup failure can't break the launch.
     """
     tz = (timezone or "").strip()
-    if tz.lower() in ("host", "local"):
-        return ""
     if tz and tz.lower() != "auto":
         return tz  # explicit IANA wins
-    if not _proxy_is_set(proxy):
-        return ""  # "" / "auto" without a proxy → host TZ
-    # proxy set, tz is "" (new default) or "auto" → resolve from egress.
-    assert proxy is not None
+    # "" or "auto" → always resolve from the egress IP.
     from .download import ensure_geoip_mmdb
 
-    ip = discover_egress_ip(proxy)
-    mmdb = ensure_geoip_mmdb()
-    return ip_to_timezone(ip, mmdb)
+    proxy_set = _proxy_is_set(proxy)
+    try:
+        ip = discover_egress_ip(proxy if proxy_set else None)
+        return ip_to_timezone(ip, ensure_geoip_mmdb())
+    except Exception:
+        if proxy_set:
+            raise  # fail-early behind a proxy (timezone_mismatch trap)
+        return ""  # no proxy: host TZ is a safe fallback

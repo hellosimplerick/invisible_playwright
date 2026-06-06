@@ -136,6 +136,20 @@ def test_discover_egress_ip_all_fail_raises(monkeypatch):
         discover_egress_ip(SOCKS)
 
 
+@pytest.mark.unit
+def test_discover_egress_ip_no_proxy_is_direct(monkeypatch):
+    # proxy=None → direct request, requests.get must get proxies=None.
+    seen = {}
+
+    def fake_get(url, **kw):
+        seen["proxies"] = kw.get("proxies", "MISSING")
+        return _FakeResp("192.0.2.55")
+
+    monkeypatch.setattr(_geo.requests, "get", fake_get)
+    assert discover_egress_ip(None) == "192.0.2.55"
+    assert seen["proxies"] is None
+
+
 # ──────────────────────────────────────────────────────────────────────
 #  ip_to_timezone — mocked mmdb reader
 # ──────────────────────────────────────────────────────────────────────
@@ -194,8 +208,9 @@ def stub_egress(monkeypatch):
     """Make egress resolution deterministic + offline; record if it ran."""
     state = {"called": False}
 
-    def fake_discover(proxy, **kw):
+    def fake_discover(proxy=None, **kw):
         state["called"] = True
+        state["proxy_arg"] = proxy
         return "203.0.113.7"
 
     monkeypatch.setattr(_geo, "discover_egress_ip", fake_discover)
@@ -208,56 +223,66 @@ def stub_egress(monkeypatch):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("sentinel", ["host", "local", "HOST", "Local"])
-def test_resolve_host_sentinel_forces_host_tz(sentinel, stub_egress):
-    # Even with a proxy set, "host"/"local" force the host TZ and never resolve.
-    assert resolve_session_timezone(sentinel, SOCKS) == ""
-    assert stub_egress["called"] is False
-
-
-@pytest.mark.unit
-def test_resolve_explicit_iana_wins_over_proxy(stub_egress):
+def test_resolve_explicit_iana_wins(stub_egress):
+    # An explicit zone wins and never triggers resolution (proxy or not).
     assert resolve_session_timezone("Asia/Tokyo", SOCKS) == "Asia/Tokyo"
-    assert stub_egress["called"] is False  # no resolution when explicit
-
-
-@pytest.mark.unit
-def test_resolve_empty_no_proxy_is_host(stub_egress):
-    assert resolve_session_timezone("", None) == ""
+    assert resolve_session_timezone("Asia/Tokyo", None) == "Asia/Tokyo"
     assert stub_egress["called"] is False
 
 
 @pytest.mark.unit
-def test_resolve_auto_no_proxy_is_host(stub_egress):
-    assert resolve_session_timezone("auto", None) == ""
-    assert stub_egress["called"] is False
-
-
-@pytest.mark.unit
-def test_resolve_empty_with_proxy_defaults_to_auto(stub_egress):
-    # NEW default: a proxy with no timezone auto-resolves from the egress.
+def test_resolve_empty_with_proxy_resolves_from_proxy(stub_egress):
     assert resolve_session_timezone("", SOCKS) == "America/New_York"
     assert stub_egress["called"] is True
+    assert stub_egress["proxy_arg"] == SOCKS  # routed through the proxy
 
 
 @pytest.mark.unit
-def test_resolve_auto_with_proxy_resolves(stub_egress):
+def test_resolve_auto_with_proxy_resolves_from_proxy(stub_egress):
     assert resolve_session_timezone("auto", HTTP) == "America/New_York"
+    assert stub_egress["proxy_arg"] == HTTP
+
+
+@pytest.mark.unit
+def test_resolve_empty_no_proxy_resolves_from_host(stub_egress):
+    # auto ALWAYS resolves — without a proxy, from the host's own public IP.
+    assert resolve_session_timezone("", None) == "America/New_York"
     assert stub_egress["called"] is True
+    assert stub_egress["proxy_arg"] is None  # direct request, no proxy
 
 
 @pytest.mark.unit
-def test_resolve_direct_proxy_treated_as_no_proxy(stub_egress):
-    assert resolve_session_timezone("auto", {"server": "direct://"}) == ""
-    assert stub_egress["called"] is False
+def test_resolve_auto_no_proxy_resolves_from_host(stub_egress):
+    assert resolve_session_timezone("auto", None) == "America/New_York"
+    assert stub_egress["proxy_arg"] is None
 
 
 @pytest.mark.unit
-def test_resolve_fail_early_propagates(monkeypatch):
-    # With a proxy set, a discovery failure must raise — never silent host TZ.
-    def boom(proxy, **kw):
+def test_resolve_direct_proxy_resolves_via_host(stub_egress):
+    # direct:// counts as "no proxy" → resolve from the host IP, don't skip.
+    assert resolve_session_timezone("auto", {"server": "direct://"}) == "America/New_York"
+    assert stub_egress["proxy_arg"] is None
+
+
+@pytest.mark.unit
+def test_resolve_no_proxy_failure_falls_back_to_host(monkeypatch):
+    # Without a proxy, a lookup failure must NOT break the launch → host TZ ("").
+    def boom(proxy=None, **kw):
+        raise GeoTimezoneError("offline")
+
+    monkeypatch.setattr(_geo, "discover_egress_ip", boom)
+    assert resolve_session_timezone("auto", None) == ""
+    assert resolve_session_timezone("", None) == ""
+
+
+@pytest.mark.unit
+def test_resolve_proxy_failure_raises(monkeypatch):
+    # With a proxy set, a failure must raise — never a silent host-TZ fallback.
+    def boom(proxy=None, **kw):
         raise GeoTimezoneError("no egress")
 
     monkeypatch.setattr(_geo, "discover_egress_ip", boom)
     with pytest.raises(GeoTimezoneError):
         resolve_session_timezone("auto", SOCKS)
+    with pytest.raises(GeoTimezoneError):
+        resolve_session_timezone("", SOCKS)

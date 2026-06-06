@@ -7,9 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
-- `timezone="auto"`: resolve the browser timezone from the proxy egress IP. A session with a proxy and no explicit timezone now defaults to `auto` — a foreign proxy paired with the host TZ is the classic `timezone_mismatch` signal. The egress IP is discovered through the proxy (SOCKS supported) and mapped to its IANA zone with an offline mmdb (`daijro/geoip-all-in-one`, downloaded + cached on first use; `STEALTHFOX_GEOIP_MMDB` points at your own). Precedence: an explicit zone wins; `""`/`"auto"` without a proxy stay on the host TZ; `"host"`/`"local"` force the host TZ even behind a proxy. With a proxy, an unresolvable zone raises rather than silently falling back.
+- `timezone="auto"`: the browser timezone is auto-derived from the egress IP. By default (no explicit timezone) it ALWAYS resolves — from the proxy egress when a proxy is set, otherwise from the host's own public IP — so the zone can never disagree with the IP (the classic `timezone_mismatch` signal). An explicit `"Area/City"` is the only way to force a specific zone. On failure: with a proxy the launch raises (no silent host-TZ fallback behind a foreign proxy); without a proxy it falls back to the host TZ so a transient lookup can't break the launch.
+- The egress IP is mapped to its IANA zone with an offline mmdb (`daijro/geoip-all-in-one`). It auto-updates against the upstream weekly rebuild: cached locally, re-checked after `GEOIP_REFRESH_DAYS` (7), older copies pruned, and a stale cache is reused when offline. `STEALTHFOX_GEOIP_MMDB` points at your own `.mmdb` to skip the download.
 - `resolve_session_timezone(timezone, proxy)` and `ensure_geoip_mmdb()` re-exported at the package root (plus `GeoTimezoneError`) so integrations that own their launch can reproduce the resolution.
-- `tests/test_geo.py`: 32 unit tests (precedence policy, proxy→requests translation, egress discovery, IP→IANA mapping, fail-early).
+- `tests/test_geo.py` (37) + `tests/test_geoip_update.py` (freshness / auto-update / offline fallback) unit tests.
 
 ### Changed
 - New runtime dependencies: `requests[socks]` (SOCKS egress lookup), `maxminddb` (mmdb reader), `tzdata` (IANA database for `zoneinfo`, which Windows lacks).
