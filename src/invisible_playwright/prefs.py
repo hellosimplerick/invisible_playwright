@@ -231,6 +231,17 @@ _BASELINE: Dict[str, Any] = {
     "network.proxy.socks_remote_dns":                     True,
     "network.proxy.failover_direct":                      False,
 
+    # TLS ClientHello fingerprint — match stock Firefox byte-for-byte.
+    # The Playwright/Juggler Firefox build this binary derives from re-enables
+    # cipher 0xC009 (TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA), which retail Firefox
+    # 150 does NOT offer. That extra (17th) cipher shifts our JA3/JA4 away from
+    # any real Firefox (ja4 t13d1717h2 vs stock t13d1617h2). A ClientHello that
+    # matches no real browser is itself a consistency tell. Disabling it makes
+    # JA3/JA4/peetprint byte-identical to retail FF150 (verified on tls.peet.ws).
+    # Stock Firefox ships without 0xC009 and works on the whole web, so this only
+    # improves fingerprint consistency — it cannot break connectivity.
+    "security.ssl3.ecdhe_ecdsa_aes_128_sha":              False,
+
     # Safebrowsing — chatty and fingerprintable.
     "browser.safebrowsing.malware.enabled":               False,
     "browser.safebrowsing.phishing.enabled":              False,
