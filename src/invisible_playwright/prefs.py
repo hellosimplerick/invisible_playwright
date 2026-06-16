@@ -243,6 +243,18 @@ _BASELINE: Dict[str, Any] = {
     # improves fingerprint consistency — it cannot break connectivity.
     "security.ssl3.ecdhe_ecdsa_aes_128_sha":              False,
 
+    # Date.now property normalization. Our build's *pristine* built-in Date.now
+    # property carries an internal representation that differs subtly from a
+    # stock Firefox's, which some fingerprint scripts can distinguish from a
+    # normal property. The binary (Juggler FrameTree) performs a plain
+    # self-assignment `Date.now = Date.now` in every new main-world document,
+    # converting it to a normal data property identical to a real browser's —
+    # WITHOUT changing its value, identity or toString (it stays the native
+    # function reporting "[native code]"). Pure fingerprint-consistency, no
+    # behavior change. Requires the binary's `zoom.stealth.normalize_date_now`
+    # support (firefox builds from 2026-06-15 on).
+    "zoom.stealth.normalize_date_now":                    True,
+
     # Safebrowsing — chatty and fingerprintable.
     "browser.safebrowsing.malware.enabled":               False,
     "browser.safebrowsing.phishing.enabled":              False,
